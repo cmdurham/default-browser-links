@@ -36,6 +36,41 @@ Works in Chrome, Helium, Edge, Brave, Vivaldi, Arc and other Chromium browsers.
 A red `!` badge means the helper isn't installed, or this browser *is* your
 default browser (links would just come back). The popup says which, and how to fix it.
 
+## Troubleshooting
+
+Links still opening in the browser that runs your web apps? On that Mac, in this folder:
+
+```sh
+git pull            # get the latest version
+./doctor.sh         # checks every link in the chain and says what to fix
+./doctor.sh --fix   # also (re)installs the helper for the extension ids it finds
+```
+
+Then reload the extension on the extensions page.
+
+The doctor checks:
+
+- which app macOS opens web links with
+- whether the helper is installed and responds (security software can block it)
+- for each browser and profile: whether the extension is loaded and turned on,
+  its site access, and whether the helper accepts its ID
+- whether that browser is itself the default browser
+- managed policies that block helpers or extensions
+
+If everything checks out but links still don't go out, open the popup and watch
+**Recent activity** while you click a link in the app:
+
+| You see | Meaning |
+| --- | --- |
+| Nothing at all, not even **Watching links** | The extension isn't running in that app's page. Reload the app window. If it's still missing, check the extension's site access. |
+| **Click → kept here** with a reason | That rule kept the link, e.g. *same site* or *on the keep list*. |
+| **New tab → kept here** | The app opened the link itself in a new tab, and that rule kept it. |
+| **… → helper failed** with an error | The helper couldn't open it, and the error says why. The link opens in this browser instead. |
+| **… → default browser**, but it opened here anyway | The default browser is this browser, or something else reopened it. |
+
+**Copy diagnostics** puts the status, settings and recent activity on the
+clipboard as text.
+
 ## What goes out and what stays
 
 Going to the default browser:
@@ -44,6 +79,8 @@ Going to the default browser:
   `target=_blank`, inside iframes, SVG, or open and closed shadow DOM.
 - New tabs a page opens itself (`window.open`, including the blank-then-redirect
   pattern), when they lead to another site. The stray tab is closed.
+- Links in blank or `srcdoc` frames that pages fill in themselves (common in
+  Google apps). These count as part of the page that created them.
 - In PWAs, same-site links that Chromium itself moves out of the app into a
   browser tab (outside the app's scope).
 

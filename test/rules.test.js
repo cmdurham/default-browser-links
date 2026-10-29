@@ -1,7 +1,7 @@
 // node --test test/
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { DEFAULTS, shouldRedirect, hostMatches, isKept, normalizeHost, parseHostList } = require('../rules.js');
+const { DEFAULTS, decide, shouldRedirect, hostMatches, isKept, normalizeHost, parseHostList } = require('../rules.js');
 
 const app = (href, pageUrl = 'https://app.slack.com/client/T1', settings = {}) =>
   shouldRedirect({ href, pageUrl, inApp: true, settings });
@@ -63,6 +63,19 @@ test('leftApp: same-site links Chromium moved out of the app go out', () => {
   assert.equal(r({ inApp: false, leftApp: true, settings: { scope: 'all' } }), false);
   assert.equal(r({ inApp: true, leftApp: true, settings: { keepInApp: ['slack.com'] } }), false);
   assert.equal(shouldRedirect({ href: 'mailto:x@y.z', pageUrl: 'https://a.com/', inApp: true, leftApp: true, settings: {} }), false);
+});
+
+test('decide explains itself', () => {
+  const d = (href, opts = {}) => decide({ href, pageUrl: 'https://app.slack.com/', inApp: true, settings: {}, ...opts }).reason;
+  assert.equal(d('https://github.com/'), 'other-site');
+  assert.equal(d('https://app.slack.com/x'), 'same-site');
+  assert.equal(d('https://app.slack.com/x', { leftApp: true }), 'left-app');
+  assert.equal(d('https://accounts.google.com/'), 'kept');
+  assert.equal(d('mailto:a@b.c'), 'not-web');
+  assert.equal(d('https://github.com/', { inApp: false }), 'not-in-app');
+  assert.equal(d('https://github.com/', { settings: { enabled: false } }), 'paused');
+  assert.deepEqual(decide({ href: 'https://github.com/', pageUrl: 'https://a.com/', inApp: true, settings: {} }),
+    { redirect: true, reason: 'other-site' });
 });
 
 test('from a non-web page (e.g. about:blank) any web link goes out', () => {

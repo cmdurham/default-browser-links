@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Default Browser Links",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Opens links from installed web apps (PWAs), or from every window, in your computer's default browser.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -34,7 +34,9 @@
       "matches": ["http://*/*", "https://*/*"],
       "js": ["rules.js", "content.js"],
       "run_at": "document_start",
-      "all_frames": true
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
     }
   ],
   "commands": {

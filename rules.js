@@ -60,18 +60,24 @@
   // inApp: the page is in an installed web app's window.
   // leftApp: Chromium already moved the link out of the app into a browser
   // tab, i.e. it's outside the app's scope even if it's on the same site.
-  function shouldRedirect({ href, pageUrl, inApp, leftApp = false, settings }) {
+  // Same question, with the reason (shown in the popup's activity log).
+  function decide({ href, pageUrl, inApp, leftApp = false, settings }) {
     const s = { ...DEFAULTS, ...settings };
-    if (!s.enabled) return false;
-    if (!inApp && s.scope !== 'all') return false;
+    const no = (reason) => ({ redirect: false, reason });
+    if (!s.enabled) return no('paused');
+    if (!inApp && s.scope !== 'all') return no('not-in-app');
     const target = parse(href, pageUrl);
-    if (!isWeb(target)) return false;
-    if (isKept(target, s.keepInApp)) return false;
-    if (inApp && leftApp) return true;
+    if (!isWeb(target)) return no('not-web');
+    if (isKept(target, s.keepInApp)) return no('kept');
+    if (inApp && leftApp) return { redirect: true, reason: 'left-app' };
     // Links within the same site are part of the app (or page) itself.
     const page = parse(pageUrl);
-    if (isWeb(page) && page.origin === target.origin) return false;
-    return true;
+    if (isWeb(page) && page.origin === target.origin) return no('same-site');
+    return { redirect: true, reason: 'other-site' };
+  }
+
+  function shouldRedirect(args) {
+    return decide(args).redirect;
   }
 
   // Textarea contents -> clean, de-duplicated host list.
@@ -84,7 +90,7 @@
     return [...seen];
   }
 
-  const api = { DEFAULTS, shouldRedirect, hostMatches, isKept, normalizeHost, parseHostList };
+  const api = { DEFAULTS, decide, shouldRedirect, hostMatches, isKept, normalizeHost, parseHostList };
   root.DefaultBrowserRules = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);

@@ -114,5 +114,17 @@ textarea {
 .switch:checked { background: var(--accent); }
 .switch:checked::after { transform: translateX(16px); }
 
+.activity { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.activity li { padding: 7px 12px; display: grid; gap: 1px; font-size: 12px; }
+.activity li + li { border-top: 1px solid var(--border); }
+.activity .what { display: flex; gap: 6px; align-items: baseline; }
+.activity .what b { font-weight: 600; flex: none; }
+.activity .what span { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity .what time { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.activity .url { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity .sent b { color: var(--ok); }
+.activity .failed b, .activity .bad b { color: var(--danger); }
+.activity .empty { color: var(--muted); text-align: center; padding: 14px 12px; }
+
 footer { display: grid; gap: 4px; padding: 0 2px; }
 footer code { user-select: all; }

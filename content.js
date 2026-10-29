@@ -1,7 +1,7 @@
 // Catches link clicks before the page (or Chromium) acts on them and sends
 // links that leave the app to the default browser instead.
 (() => {
-  const { DEFAULTS, shouldRedirect } = globalThis.DefaultBrowserRules;
+  const { DEFAULTS, decide } = globalThis.DefaultBrowserRules;
 
   let settings = DEFAULTS;
   let helperReady = false; // the native helper is installed and the default browser isn't this one
@@ -25,8 +25,17 @@
     }
   });
 
+  // Recorded in the popup's activity log, to see what happened to a click.
+  const log = (entry) => chrome.runtime.sendMessage({ type: 'log', entry }).catch(() => {});
+
   chrome.runtime.sendMessage({ type: 'where' })
-    .then((reply) => { if (reply) inAppWindow = !!reply.inApp; })
+    .then((reply) => {
+      if (reply) inAppWindow = !!reply.inApp;
+      if (inApp() && window === top) {
+        const mode = appModes.find((q) => q.matches)?.media.match(/: (.+)\)/)?.[1] || 'app window';
+        log({ kind: 'watching', url: location.href, detail: mode });
+      }
+    })
     .catch(() => {});
   // The tab moved between a browser window and an app window ("Open in Chrome").
   chrome.runtime.onMessage.addListener((msg) => {
@@ -65,23 +74,36 @@
     return link.href;
   }
 
+  // The page's own address for same-site checks. Blank and srcdoc frames
+  // (which Google's apps use a lot) belong to the page that created them.
+  function pageUrl() {
+    if (/^https?:$/.test(location.protocol)) return location.href;
+    return self.origin && self.origin !== 'null' ? self.origin + '/' : document.baseURI;
+  }
+
   function onClick(event) {
     // Left click (plain or with ⌘/⇧) and middle click; right click opens the menu.
     if (event.button !== 0 && event.button !== 1) return;
-    if (!event.isTrusted || !helperReady || !settings.enabled) return;
     // Extension was reloaded or removed since this page loaded.
-    if (!chrome.runtime?.id) return;
+    if (!event.isTrusted || !chrome.runtime?.id) return;
 
     const link = linkFrom(event);
-    if (!link || link.hasAttribute('download')) return;
-    const href = hrefOf(link);
-    if (!href || !shouldRedirect({ href, pageUrl: location.href, inApp: inApp(), settings })) return;
+    const href = link && hrefOf(link);
+    if (!href) return;
+    const app = inApp();
+    // Only clicks in app windows are logged; normal browsing would drown them out.
+    const kept = (reason) => { if (app) log({ kind: 'click', url: href, outcome: 'kept', reason }); };
+
+    if (link.hasAttribute('download')) return kept('download');
+    if (!helperReady) return kept('helper-not-ready');
+    const { redirect, reason } = decide({ href, pageUrl: pageUrl(), inApp: app, settings });
+    if (!redirect) return kept(reason);
 
     // Stop the page too: many web apps open links from their own click
     // handlers with window.open, which would open the link a second time.
     event.preventDefault();
     event.stopImmediatePropagation();
-    chrome.runtime.sendMessage({ type: 'open', url: href }).catch(() => {});
+    chrome.runtime.sendMessage({ type: 'open', url: href, via: 'click', reason }).catch(() => {});
   }
 
   window.addEventListener('click', onClick, true);

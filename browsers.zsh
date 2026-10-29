@@ -1,0 +1,23 @@
+# Chromium-based browsers on macOS, shared by install-helper.sh and doctor.sh:
+# "<folder under ~/Library/Application Support>|<bundle id>|<name>"
+BROWSERS=(
+  "Google/Chrome|com.google.Chrome|Chrome"
+  "Google/Chrome Beta|com.google.Chrome.beta|Chrome Beta"
+  "Google/Chrome Dev|com.google.Chrome.dev|Chrome Dev"
+  "Google/Chrome Canary|com.google.Chrome.canary|Chrome Canary"
+  "Google/Chrome for Testing|com.google.chrome.for.testing|Chrome for Testing"
+  "Chromium|org.chromium.Chromium|Chromium"
+  "net.imput.helium|net.imput.helium|Helium"
+  "Arc/User Data|company.thebrowser.Browser|Arc"
+  "Microsoft Edge|com.microsoft.edgemac|Edge"
+  "Microsoft Edge Beta|com.microsoft.edgemac.Beta|Edge Beta"
+  "Microsoft Edge Dev|com.microsoft.edgemac.Dev|Edge Dev"
+  "Microsoft Edge Canary|com.microsoft.edgemac.Canary|Edge Canary"
+  "BraveSoftware/Brave-Browser|com.brave.Browser|Brave"
+  "BraveSoftware/Brave-Browser-Beta|com.brave.Browser.beta|Brave Beta"
+  "BraveSoftware/Brave-Browser-Nightly|com.brave.Browser.nightly|Brave Nightly"
+  "Vivaldi|com.vivaldi.Vivaldi|Vivaldi"
+  "com.operasoftware.Opera|com.operasoftware.Opera|Opera"
+  "Thorium|org.chromium.Thorium|Thorium"
+  "Dia/User Data|company.thebrowser.dia|Dia"
+)

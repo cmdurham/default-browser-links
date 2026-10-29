@@ -57,6 +57,18 @@
       <small>Includes subdomains. Links within the same site always stay.</small>
     </section>
 
+    <section>
+      <div class="section">
+        <h2>Recent activity</h2>
+        <span>
+          <button class="link" id="copy-diag" type="button">Copy diagnostics</button>
+          <button class="link" id="clear-log" type="button">Clear</button>
+        </span>
+      </div>
+      <ol id="activity" class="card activity"></ol>
+      <small>What happened to links clicked in installed web apps. Kept until the browser quits.</small>
+    </section>
+
     <footer>
       <small>Right-click a link → <b>Open Link in Default Browser</b>, or press ⌥⇧E for the current page.</small>
       <small>Extension ID <code id="ext-id"></code></small>

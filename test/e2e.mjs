@@ -44,6 +44,7 @@ const PAGE = () => `<!doctype html><meta charset=utf-8><title>app</title>
 <button id=later onclick="const w = window.open(); setTimeout(() => { w.location = '${target('later')}'; }, 100)">later</button>
 <button id=popup onclick="window.open('${target('popup')}', 'p', 'width=400,height=400')">popup</button>
 <iframe id=frame src="${url('third', '/frame')}" width=200 height=40></iframe>
+<iframe id=blankframe width=200 height=40></iframe>
 <script>
   window.appHandlerRan = 0;
   // Like Slack and friends: the app opens links itself.
@@ -53,6 +54,9 @@ const PAGE = () => `<!doctype html><meta charset=utf-8><title>app</title>
   const root = document.getElementById('shadowhost').attachShadow({ mode: 'closed' });
   root.innerHTML = '<a id=shadow href="${target('shadow')}">shadow</a>';
   window.shadowLink = root.getElementById('shadow');
+  // Google-style blank frame filled in by the page; it shares the page's origin.
+  document.getElementById('blankframe').contentDocument.body.innerHTML =
+    '<a id=bs href="/inblank?from=blanksame">same</a> <a id=be href="${target('blankext')}">ext</a>';
 </script>`;
 
 const FRAME = () => `<!doctype html><a id=f href="${url('fourth', '/target?from=iframe')}">iframe link</a>`;
@@ -132,7 +136,16 @@ async function launch(extraArgs = []) {
       ...extraArgs,
     ],
   });
-  worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+  // The worker can start before Playwright attaches and go unreported; opening
+  // an extension page wakes it (or makes it show up) if so.
+  worker = context.serviceWorkers()[0]
+    || await context.waitForEvent('serviceworker', { timeout: 5000 }).catch(() => null);
+  if (!worker) {
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${EXT_ID}/popup.html`).catch(() => {});
+    worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker', { timeout: 15000 });
+    await page.close();
+  }
 }
 
 after(async () => {
@@ -210,6 +223,16 @@ test('scope "all": links in shadow DOM, SVG and iframes', async () => {
   await page2.frameLocator('#frame').locator('#f').click();
   await expectOpened('iframe');
   assert.equal(page2.url(), url('app'));
+});
+
+test('scope "all": links in a blank (about:blank) frame use the page’s origin', async () => {
+  await setSettings({ scope: 'all' });
+  const page = await freshPage();
+  const frame = page.frameLocator('#blankframe');
+  await frame.locator('#be').click();
+  await expectOpened('blankext');
+  await frame.locator('#bs').click();
+  await expectNotOpened('blanksame');
 });
 
 test('scope "all": an app’s own click handler doesn’t open the link a second time', async () => {
@@ -358,4 +381,28 @@ test('normal window, scope "all": same-site target=_blank stays', async () => {
   const [tab] = await Promise.all([context.waitForEvent('page'), page.click('#sameblank')]);
   await expectNotOpened('sameblank');
   assert.ok(!tab.isClosed());
+});
+
+test('app window: the activity log records what happened', async () => {
+  await context.close();
+  await launch([`--app=${url('app')}`]);
+  await setSettings({});
+  await worker.evaluate(() => chrome.storage.session.set({ activity: [] }));
+  const page = await freshPage();
+  await page.click('#ext');
+  await expectOpened('ext');
+  await Promise.all([page.waitForURL(url('app', '/same')), page.click('#same')]);
+  await page.waitForTimeout(300);
+  const { activity } = await worker.evaluate(() => chrome.storage.session.get('activity'));
+  const summary = activity.map((e) => [e.kind, e.outcome, e.reason].filter(Boolean).join(':'));
+  assert.ok(summary.includes('watching'), JSON.stringify(summary));
+  assert.ok(summary.includes('click:sent:other-site'), JSON.stringify(summary));
+  assert.ok(summary.includes('click:kept:same-site'), JSON.stringify(summary));
+
+  // And the popup shows it.
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${EXT_ID}/popup.html`);
+  await popup.locator('#activity li.sent').first().waitFor();
+  assert.match(await popup.textContent('#activity'), /Click → default browser/);
+  await popup.close();
 });

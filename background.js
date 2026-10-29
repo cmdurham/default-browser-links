@@ -7,10 +7,11 @@
 //      here, sent out, and closed.
 importScripts('rules.js');
 
-const { DEFAULTS, shouldRedirect } = globalThis.DefaultBrowserRules;
+const { DEFAULTS, decide } = globalThis.DefaultBrowserRules;
 const HELPER = 'com.cmdurham.default_browser_links';
 const PENDING_MS = 5000; // how long to wait for a blank new tab to get its real URL
 const STATUS_ALARM = 'refresh-status';
+const LOG_SIZE = 50;
 
 async function getSettings() {
   return chrome.storage.sync.get(DEFAULTS);
@@ -23,6 +24,20 @@ function isWebUrl(url) {
 async function isAppWindow(windowId) {
   const win = await chrome.windows.get(windowId).catch(() => null);
   return win?.type === 'app';
+}
+
+// ---------------------------------------------------------------------------
+// Activity log, shown in the popup (session storage: cleared on browser quit)
+
+let logWrite = Promise.resolve();
+
+function log(entry) {
+  logWrite = logWrite.then(async () => {
+    const { activity = [] } = await chrome.storage.session.get('activity');
+    activity.unshift({ t: Date.now(), ...entry });
+    await chrome.storage.session.set({ activity: activity.slice(0, LOG_SIZE) });
+  }).catch(() => {});
+  return logWrite;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +62,10 @@ async function refreshStatus() {
     status = { state: /not found|forbidden/i.test(message) ? 'missing' : 'error', message };
   }
   status.checkedAt = Date.now();
+  const { status: previous } = await chrome.storage.local.get('status');
+  if (previous?.state !== status.state) {
+    log({ kind: 'status', outcome: status.state, detail: status.message || status.defaultBrowser?.name || '' });
+  }
   await chrome.storage.local.set({ status });
   await updateBadge(status);
   return status;
@@ -80,13 +99,14 @@ async function updateBadge(status) {
 
 // Opens url in the default browser. If that fails and `fallback` is set,
 // opens it in this browser instead so the click isn't lost.
-async function openInDefault(url, { fallback = false } = {}) {
+async function openInDefault(url, { fallback = false, via = 'menu', reason = '' } = {}) {
   let reply;
   try {
     reply = await chrome.runtime.sendNativeMessage(HELPER, { type: 'open', url });
   } catch (e) {
     reply = { ok: false, error: String(e?.message || e) };
   }
+  log({ kind: via, url, outcome: reply?.ok ? 'sent' : 'failed', reason, detail: reply?.ok ? '' : String(reply?.error || '') });
   if (!reply?.ok) {
     refreshStatus();
     if (fallback) await openHere(url);
@@ -107,8 +127,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg?.type) {
     case 'open':
       if (!isWebUrl(msg.url)) return false;
-      openInDefault(msg.url, { fallback: true }).then((ok) => sendResponse({ ok }));
+      openInDefault(msg.url, { fallback: true, via: 'click', reason: msg.reason }).then((ok) => sendResponse({ ok }));
       return true;
+    case 'log':
+      if (msg.entry && typeof msg.entry === 'object') {
+        log({ ...msg.entry, inFrame: sender.frameId > 0 });
+      }
+      return false;
     case 'where':
       if (!sender.tab) return false;
       isAppWindow(sender.tab.windowId).then((inApp) => sendResponse({ inApp }));
@@ -155,16 +180,19 @@ chrome.tabs.onRemoved.addListener((tabId) => pending.delete(tabId));
 // Resolves to what route() needs, or null when the new tab should be left alone.
 async function contextFor(sourceTabId, tabId) {
   const [settings, status] = await Promise.all([getSettings(), getStatus()]);
-  if (!settings.enabled || status.state !== 'ok') return null;
-
   const source = await chrome.tabs.get(sourceTabId).catch(() => null);
   if (!source) return null;
   const inApp = await isAppWindow(source.windowId);
+  // Like clicks, only new tabs from app windows are logged when left alone.
+  const skip = (reason) => (inApp ? { skip: reason } : null);
+
+  if (!settings.enabled) return skip('paused');
+  if (status.state !== 'ok') return skip('helper-not-ready');
   if (!inApp && settings.scope !== 'all') return null;
 
   const tab = await chrome.tabs.get(tabId).catch(() => null);
   const win = tab && await chrome.windows.get(tab.windowId).catch(() => null);
-  if (win?.type === 'popup' && !settings.includePopups) return null;
+  if (win?.type === 'popup' && !settings.includePopups) return skip('popup');
   // In-scope links from a web app open in another app window; out-of-scope
   // ones land in a browser window.
   const leftApp = inApp && win?.type === 'normal';
@@ -173,8 +201,14 @@ async function contextFor(sourceTabId, tabId) {
 
 async function route(tabId, url, ctxPromise) {
   const ctx = await ctxPromise;
-  if (!ctx || !shouldRedirect({ href: url, pageUrl: ctx.sourceUrl, ...ctx })) return;
-  if (await openInDefault(url)) await chrome.tabs.remove(tabId).catch(() => {});
+  if (!ctx) return;
+  if (ctx.skip) return log({ kind: 'new-tab', url, outcome: 'kept', reason: ctx.skip });
+  const { redirect, reason } = decide({ href: url, pageUrl: ctx.sourceUrl, ...ctx });
+  if (!redirect) {
+    if (ctx.inApp) log({ kind: 'new-tab', url, outcome: 'kept', reason });
+    return;
+  }
+  if (await openInDefault(url, { via: 'new-tab', reason })) await chrome.tabs.remove(tabId).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -182,13 +216,13 @@ async function route(tabId, url, ctxPromise) {
 
 chrome.contextMenus.onClicked.addListener((info) => {
   const url = info.menuItemId === 'open-link' ? info.linkUrl : info.pageUrl;
-  if (isWebUrl(url)) openInDefault(url, { fallback: false });
+  if (isWebUrl(url)) openInDefault(url, { via: 'menu' });
 });
 
 chrome.commands.onCommand.addListener(async (command, tab) => {
   if (command !== 'open-page') return;
   tab ??= (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0];
-  if (isWebUrl(tab?.url)) openInDefault(tab.url);
+  if (isWebUrl(tab?.url)) openInDefault(tab.url, { via: 'shortcut' });
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {

@@ -3,12 +3,13 @@
 # needs to hand links to your default browser. Extensions can't launch other
 # apps themselves; this small helper does it for them via native messaging.
 #
-#   ./install-helper.sh [--uninstall] [extension-id]
+#   ./install-helper.sh [--uninstall] [extension-id …]
 #
 # Registers the helper with every Chromium-based browser that has a profile
 # folder on this Mac (Chrome, Helium, Arc, Edge, Brave, Vivaldi, Chromium…).
 # The extension id defaults to the one a browser gives this folder when it's
-# loaded unpacked; pass the id shown on the extensions page if yours differs.
+# loaded unpacked; pass the id(s) shown on the extensions page if yours differ.
+# ./doctor.sh checks the whole setup and finds the ids for you.
 # Set DBL_EXTRA_DIRS (colon-separated browser data folders) to add others.
 set -euo pipefail
 
@@ -18,15 +19,10 @@ SUPPORT="$HOME/Library/Application Support"
 BIN_DIR="$SUPPORT/DefaultBrowserLinks"
 BIN="$BIN_DIR/default-browser-links-helper"
 
-BROWSER_DIRS=(
-  "Google/Chrome" "Google/Chrome Beta" "Google/Chrome Dev" "Google/Chrome Canary"
-  "Google/Chrome for Testing" "Chromium" "net.imput.helium" "Arc/User Data"
-  "Microsoft Edge" "Microsoft Edge Beta" "Microsoft Edge Dev" "Microsoft Edge Canary"
-  "BraveSoftware/Brave-Browser" "BraveSoftware/Brave-Browser-Beta" "BraveSoftware/Brave-Browser-Nightly"
-  "Vivaldi" "com.operasoftware.Opera" "Thorium" "Dia/User Data"
-)
+source "$REPO/browsers.zsh"
 dirs=()
-for d in $BROWSER_DIRS; do
+for b in $BROWSERS; do
+  d=${b%%|*}
   [[ -d "$SUPPORT/$d" ]] && dirs+=("$SUPPORT/$d")
 done
 for d in ${(s.:.)${DBL_EXTRA_DIRS:-}}; do
@@ -53,11 +49,16 @@ if ! command -v swiftc >/dev/null; then
 fi
 
 # Unpacked extension ids are the first 128 bits of SHA-256(folder path), hex mapped to a–p.
-EXT_ID=${1:-$(print -rn -- "$REPO" | shasum -a 256 | cut -c1-32 | tr '0-9a-f' 'a-p')}
-if [[ ! $EXT_ID =~ '^[a-p]{32}$' ]]; then
-  echo "'$EXT_ID' doesn't look like an extension id (32 letters a–p)." >&2
-  exit 1
-fi
+EXT_IDS=("$@")
+(( ${#EXT_IDS} )) || EXT_IDS=($(print -rn -- "$REPO" | shasum -a 256 | cut -c1-32 | tr '0-9a-f' 'a-p'))
+origins=()
+for id in $EXT_IDS; do
+  if [[ ! $id =~ '^[a-p]{32}$' ]]; then
+    echo "'$id' doesn't look like an extension id (32 letters a–p)." >&2
+    exit 1
+  fi
+  origins+=("\"chrome-extension://$id/\"")
+done
 
 mkdir -p "$BIN_DIR"
 swiftc -O -o "$BIN" "$REPO/helper/default-browser-links-helper.swift"
@@ -70,11 +71,11 @@ for d in $dirs; do
   "description": "Default Browser Links helper: opens links in the default browser",
   "path": "$BIN",
   "type": "stdio",
-  "allowed_origins": ["chrome-extension://$EXT_ID/"]
+  "allowed_origins": [${(j:, :)origins}]
 }
 JSON
   echo "  registered with ${d#$SUPPORT/}"
 done
 
-echo "Installed the Default Browser Links helper for extension $EXT_ID."
+echo "Installed the Default Browser Links helper for extension ${(j:, :)EXT_IDS}."
 echo "Reopen the extension's popup (or reload it) to pick it up."
