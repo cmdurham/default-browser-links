@@ -11,6 +11,8 @@
 # loaded unpacked; pass the id(s) shown on the extensions page if yours differ.
 # ./doctor.sh checks the whole setup and finds the ids for you.
 # Set DBL_EXTRA_DIRS (colon-separated browser data folders) to add others.
+# Set DBL_ONLY (colon-separated folder names from browsers.zsh, e.g.
+# net.imput.helium) to register with just those browsers.
 set -euo pipefail
 
 NAME=com.cmdurham.default_browser_links
@@ -21,8 +23,10 @@ BIN="$BIN_DIR/default-browser-links-helper"
 
 source "$REPO/browsers.zsh"
 dirs=()
+only=(${(s.:.)${DBL_ONLY:-}})
 for b in $BROWSERS; do
   d=${b%%|*}
+  (( ${#only} )) && (( ! ${only[(Ie)$d]} )) && continue
   [[ -d "$SUPPORT/$d" ]] && dirs+=("$SUPPORT/$d")
 done
 for d in ${(s.:.)${DBL_EXTRA_DIRS:-}}; do
