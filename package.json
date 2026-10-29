@@ -1,0 +1,12 @@
+{
+  "name": "default-browser-links",
+  "private": true,
+  "scripts": {
+    "build:helper": "mkdir -p test/.build && swiftc -O -o test/.build/helper helper/default-browser-links-helper.swift",
+    "test": "npm run build:helper && node --test 'test/*.test.js'",
+    "test:e2e": "npm run build:helper && node --test test/e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.52.0"
+  }
+}

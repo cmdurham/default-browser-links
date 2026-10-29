@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light dark">
+  <title>Default Browser Links</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <img src="icons/icon48.png" alt="">
+      <div class="title">
+        <h1>Default Browser Links</h1>
+        <p id="status" class="status">Checking the helper…</p>
+      </div>
+      <input type="checkbox" id="enabled" class="switch" role="switch" aria-label="Send links to the default browser">
+    </header>
+
+    <div id="setup" class="card notice" hidden>
+      <p id="setup-text"></p>
+      <code id="setup-cmd"></code>
+      <div class="actions">
+        <button class="button" id="copy-cmd" type="button">Copy command</button>
+        <button class="button" id="recheck" type="button">Check again</button>
+      </div>
+    </div>
+
+    <section>
+      <div class="section"><h2>Send links from</h2></div>
+      <div class="card">
+        <label class="row">
+          <input type="radio" name="scope" value="apps">
+          <span class="grow">Installed web apps
+            <small>Links that leave a PWA window. Normal tabs work as usual.</small></span>
+        </label>
+        <label class="row">
+          <input type="radio" name="scope" value="all">
+          <span class="grow">Every window
+            <small>Links to other sites from any page, including normal tabs.</small></span>
+        </label>
+        <label class="row">
+          <input type="checkbox" id="includePopups">
+          <span class="grow">Sign-in popups too
+            <small>Small windows a page opens itself. Usually sign-in flows that break if moved.</small></span>
+        </label>
+      </div>
+    </section>
+
+    <section>
+      <div class="section">
+        <h2><label for="keepInApp">Keep these sites here</label></h2>
+        <button class="link" id="reset-sites" type="button">Reset</button>
+      </div>
+      <textarea id="keepInApp" class="card" rows="5" spellcheck="false"
+        placeholder="One site per line, e.g. accounts.google.com"></textarea>
+      <small>Includes subdomains. Links within the same site always stay.</small>
+    </section>
+
+    <footer>
+      <small>Right-click a link → <b>Open Link in Default Browser</b>, or press ⌥⇧E for the current page.</small>
+      <small>Extension ID <code id="ext-id"></code></small>
+    </footer>
+  </main>
+  <script src="rules.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
